@@ -1,0 +1,191 @@
+---
+title: |
+    | SI 618 Winter 2017 Project Part B 
+    | Analysis of Restaurant Health Score and Customer Ratings in San Francisco Area
+author: "Ruihan Wang"
+date: "2017/4/17"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Motivation
+
+When visiting new places, we are always trying to find good restaurants to enjoy local food culture. San Francisco, with the beautiful scenery as well as the delicious food, attracts thousands of global tourists every day. How do we usually evaluate the level of a restaurant? Yelp is a well-accepted App for us to check the ratings and reviews from other customers. However, some aspects cannot be easily observed from these ratings and reviews, such as the health level of food and kitchen environment. Also, Yelp provides a lot of other restaurant information, like the categories of restaurants. So we want to identify what is the relationship between the parameters provided by Yelp such as rating score and categories versus health inspection score of restaurants.
+
+The following four questions will be analyzed in this part:
+
+* What is the difference between health score and Yelp rating’s geographic distribution?
+* What is the most common violation reason among all restaurants?
+*	Which category of restaurants own the highest or lowest average health score and Yelp rating?
+* What is the rating distribution within each risk category?
+
+## Data Sources
+### Original Datasets
+We used two data sources for analysis. One is San Francisco Restaurant Inspection Scores, a csv file downloaded from kaggle.com (https://www.kaggle.com/datasf/sf-restaurant-inspection-scores). The original source is SF Department of Public Health Database (https://www.sfdph.org/dph/EH/Food/Score/). The dataset contains more than 50,000 inspection records of restaurants in San Francisco area. Each record includes **name**, **location** (Longitude,latitude
+), **inspection date**, **health score**, **risk level**, **violation reasons** etc. The other dataset is retrieved from Yelp API (https://www.yelp.com/developers/documentation/v2/overview 
+). The responses from Yelp API are JSON format and each response contains customer **rating** (a float number from 1 to 5) and **categories** information (Chinese, American, etc.).
+
+Due to duplicated inspection records of restaurants at different time in the first dataset, we find that nearly 5,596 individual restaurants occurred in the first dataset. Therefore, we retrieved 5,596 records of restaurant rating and category information from Yelp API. In order to ensure the consistency of time and rating information, we kept the latest inspection record of each restaurant in the health score dataset. Finally, the dataset covers the time period from 2014 to 2016. Most records are in 2016.
+
+## Methods
+
+###(a) How did you manipulate the data to prepare it for analysis?  
+
+In this part, we will conduct the analysis based on the merged dataset of two data sources above in Part A. In this part, we will conduct the analysis based on the merged dataset of two data sources above in Part A. In Part A, we have already added the rating column by passing business name and location parameters in health score dataset and retrieved rating data from JSON responses. In this part, in order to analyze the features of restaurant categories, we need to add restaurant categories data into merged dataset. 
+
+Noticed that there were different dimensions of restaurant categories stored in Yelp data. For example, one dimension is defined by restaurant’s original country: American, Chinese etc. The other dimension is defined by the type of restaurants: Coffee&Tea, Pizza etc. So we must select the categories within the same dimension when comparing the effect of this parameter. Also, to ensure the size of the dataset with desired categories, we use python code to iterate all the data entries and count the top 10 categories occurred in the dataset and then group them into different dimensions. At last, we chose two category groups: one includes American, Mexican, Chinese and Italian and the other contains Coffee&Tea, Sandwiches and Pizza. Now, we added these 7 columns into the merged dataset generated in Part A.
+
+###(b) How did you handle missing, incomplete, or noisy data?
+
+After filtering the raw dataset in part A by removing duplicated and data entries without health score, in this part, we found that not every entry had been filled with all parameters. For instance, some rows lack the description of violations. To deal with this problem, our policy is to keep the rows with incomplete parameters as long as it has a health score to ensure we have sufficient data to analyze other issues which has nothing to do with these missing parameters. If these missing parameters were required, we just ignored and removed these rows in the subset for analysis of specific problem.
+
+
+###(c) How did you perform data analysis in code
+
+The general flow of each problem is almost the same. First, we created a subset of the updated merged dataset for each problem. Typically subsets were generated by calling **subset()** function in R with additional conditions. Then we use these subsets together with our visualization packages like **ggplot2** to generate the visualization. Details of the configurations of these processes will be discussed later in analysis of each problem.
+
+###(d) What challenges did you encounter and how did you solve them?
+
+Based on what we did in part A, we added several “try/except” blocks to solve that some data entries cannot get any Yelp response due to the change in business information. As a result, we added the rating column successfully. However, the main challenge in this part is how to present the categories information in the merged dataset. Categories stored in each Yelp JSON response as a list, which contains all the categories the business belongs to. This means that a restaurant will have more than one categories, some of them are not in the same dimension. For example, a pizza restaurant may be labelled “Pizza” and “Italian” at the same time. But these two categories parameters cannot be compared directly when doing analysis.
+
+Therefore, as mentioned earlier, we chose to divide categories into different groups and conduct the analysis only on those frequent categories. We counted the occurrences of all the categories in the dataset by python and listed the top 10 categories. 7 of 10 categories are selected and divided into 2 groups. We added these 7 columns to the merged dataset in part A and modified the code in part A to add 0s and 1s for each data entry. Just iterated the dataset and passed the selected categories to check and assign 0s and 1s to each column. By this way, we can filter the category in R easily for further analysis.
+
+## Analysis and Results
+
+###What is the difference between health score and Yelp rating’s geographic distribution?
+
+According to the San Francisco Public Health Department criteria, if the health score is higher than 90, the health environment is considered as a high level, if lower than 70, it is considered as a very terrible environment. Hence we created two subsets: one contains all the data entries with a health score higher than 90 and the other includes data with health score lower than 70. Then we generate two heat maps by **ggmap** package for these two subsets to discover the density distribution of high and low health score restaurants. Similarly, we can generate the heat maps for Yelp ratings by selecting the subsets based on Yelp ratings: rating higher than 4 and lower than 3. 
+
+
+```{r, echo= FALSE, message=FALSE, warning= FALSE}
+library("ggplot2")
+library("ggmap")
+
+## load original data
+yelp_data = read.csv("clean_data_v2.csv")
+
+## obtain the map
+map = get_map(location = "San Francisco", maptype="terrain",zoom=13)
+
+## good and bad health score subset
+good_hs = subset(yelp_data, inspection_score >= 90)
+bad_hs = subset(yelp_data, inspection_score <=70)
+
+## heatmap of good and bad health score 
+ggmap(map, extent = "panel") + geom_density2d(data = good_hs, 
+                                               aes(x = business_longitude, y = business_latitude), size = 0.3) + stat_density2d(data = good_hs, 
+                                                                                                                                aes(x = business_longitude, y = business_latitude, fill = ..level.., alpha = ..level..), size = 0.01, 
+                                                                                                                                bins = 16, geom = "polygon") + scale_fill_gradient(low = "green", high = "red"
+                                                                                                                                ) + scale_alpha(range = c(0, 0.3), guide = FALSE)+ggtitle("Distribution of restaurants with high health scores")
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggmap(map, extent = "panel") + geom_density2d(data = bad_hs, 
+                                               aes(x = business_longitude, y = business_latitude), size = 0.3) + stat_density2d(data = bad_hs, 
+                                                                                                                                aes(x = business_longitude, y = business_latitude, fill = ..level.., alpha = ..level..), size = 0.01, 
+                                                                                                                                bins = 16, geom = "polygon") + scale_fill_gradient(low = "green", high = "blue"
+                                                                                                                                ) + scale_alpha(range = c(0, 0.3), guide = FALSE)+ggtitle("Distribution of restaurants with low health scores")
+
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+## good and bad yelp rating dataset
+yelp_data$rating = as.numeric(as.character(yelp_data$rating))
+good_yp = subset(yelp_data, rating>=4)
+bad_yp = subset(yelp_data, rating <3)
+
+## heat map of good and bad yelp ratings
+ggmap(map, extent = "panel") + geom_density2d(data = good_yp, 
+                                               aes(x = business_longitude, y = business_latitude), size = 0.3) + stat_density2d(data = good_yp, 
+                                                                                                                                aes(x = business_longitude, y = business_latitude, fill = ..level.., alpha = ..level..), size = 0.01, 
+                                                                                                                                bins = 16, geom = "polygon") + scale_fill_gradient(low = "green", high = "red"
+                                                                                                                                ) + scale_alpha(range = c(0, 0.3), guide = FALSE)+ggtitle("Distribution of restaurants with high Yelp scores")
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+ggmap(map, extent = "panel") + geom_density2d(data = bad_yp, 
+                                                              aes(x = business_longitude, y = business_latitude), size = 0.3) + stat_density2d(data = bad_yp, 
+                                                                                                                  aes(x = business_longitude, y = business_latitude, fill = ..level.., alpha = ..level..), size = 0.01, 
+                                                                                                                  bins = 16, geom = "polygon") + scale_fill_gradient(low = "green", high = "blue"
+                                                                                                                                                                     ) + scale_alpha(range = c(0, 0.3), guide = FALSE) + ggtitle("Distribution of restaurants with low Yelp scores")
+```
+
+Given the visualizations above, we find that restaurants with extreme health scores, either high or low are denser than those with high or low Yelp ratings in geography. Also, restaurants with low health scores are further from the coast, on the edge of the city center, the Union Square. But restaurants with higher health scores get clustered at the center of the Union Square. In terms of Yelp ratings, high Yelp ratings cover a larger area than high health scores, and the red circle is closer to the coast, where owns high portion of tourists. 
+
+These features can be explained by the difference of target users. Restaurants located in the city center usually faces higher rent cost and high demands of food and environment with high quality. That’s why most restaurants with high health score centered around the Union Square.
+
+###What is the most common violation reason among all restaurants?
+
+To evaluate this question, we are trying to create a bar chart to show the count of the occurrences of violation reasons. Given that in the dataset, each violation type has a specific violation description, therefore, this question can be solved by counting the occurrences of the violations. First we used **subset** to filter data entries without empty violation descriptions. 4708 out of 5596 rows are selected at this step. Then we used **ggplot()** function to generate the bar chart in sorted order of the occurrences of each violation type. Here are the top 5 common risks of restaurants.
+
+* "Unclean or degraded floors walls or ceilings"
+* "Moderate risk food holding temperature"
+* "Inadequate and inaccessible handwashing facilities"
+* "Inadequately cleaned or sanitized food contact surfaces"
+* "Unapproved or unmaintained equipment or utensils"
+
+```{r, echo = FALSE, warning=FALSE,message=FALSE, fig.height=15, fig.width=10}
+
+violation = subset(yelp_data, as.character(yelp_data$violation_description) != "")
+ggplot(violation, aes(x = reorder(violation_description, violation_description, function(x) -length(x))))+geom_bar()+xlab("violation")+ theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+###Which category of restaurants own the highest or lowest average health score and Yelp rating?
+As mentioned in previous sections, we divided categories into 2 dimensions: one includes American, Mexican, Chinese and Italian and the other contains Coffee&Tea, Sandwiches and Pizza. To visualize this data, we first need to filter the entries within each category. Therefore, we used **subset()** function to filter 7 subsets of these 7 categories. Next, convert the ratings and scores into numeric so that we can calculate the mean value of the data. Then plot the average score vs. categories by **ggplot()**.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+amer = subset(yelp_data,yelp_data$American == 1)
+mex = subset(yelp_data,yelp_data$Mexican == 1)
+chn = subset(yelp_data, yelp_data$Chinese == 1)
+ital = subset(yelp_data, yelp_data$Italian == 1)
+
+ct = subset(yelp_data, yelp_data$Coffee.Tea == 1)
+sw = subset(yelp_data, yelp_data$Sandwiches == 1)
+piz = subset(yelp_data, yelp_data$Pizza == 1)
+
+category = c("American", "Mexican", "Chinese", "Italian")
+Healthmean = c(mean(amer$inspection_score),mean(mex$inspection_score),mean(chn$inspection_score),mean(ital$inspection_score))
+Yelpmean = c(mean(as.numeric(as.character(amer$rating))),mean(as.numeric(as.character(mex$rating))),mean(as.numeric(as.character(chn$rating))),mean(as.numeric(as.character(ital$rating))))
+cate = data.frame(category,Yelpmean,Healthmean)
+ggplot(data = cate, aes(x = reorder(category,Healthmean, function(x) -x),y = Healthmean)) + geom_histogram(stat = "identity")+xlab("category")+ylab("AVG Health score") + ggtitle("Average health score of categories")
+
+```
+
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+ggplot(data = cate, aes(x = reorder(category,Yelpmean, function(x) -x),y = Yelpmean)) + geom_histogram(stat = "identity")+xlab("category")+ylab("AVG Yelp score") + ggtitle("Average Yelp score of categories")
+
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+cat = c("Coffee&Tea","Sandwiches","Pizza")
+hm = c(mean(ct$inspection_score),mean(sw$inspection_score),mean(piz$inspection_score))
+ym = c(mean(as.numeric(as.character(ct$rating))),mean(as.numeric(as.character(sw$rating))),mean(as.numeric(as.character(piz$rating))))
+cate2 = data.frame(cat,hm,ym)
+ggplot(data = cate2, aes(x = reorder(cat,hm, function(x) -x),y = hm)) + geom_histogram(stat = "identity")+xlab("category")+ylab("AVG Health score") + ggtitle("Average Health score of categories")
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(data = cate2, aes(x = reorder(cat,ym, function(x) -x),y = ym)) + geom_histogram(stat = "identity")+xlab("category")+ylab("AVG Yelp score") + ggtitle("Average Yelp score of categories")
+
+```
+
+From the figures above, we found that for most common categories, compared with other three categories in the same group, Chinese food has a lower health score as well as Yelp ratings. Other three categories are close to each other, and American food has the best performance. In the other category group, Coffee & Tea category has the best health score and Yelp rating, the other two have similar health score but lower Yelp ratings. It seems that Coffee & Tea are much easier to get a high rating even though the health score is on the same level.
+
+###What is the rating distribution within each risk category?
+San Francisco Public Health Department divides the restaurant risk categories into three levels: High, Moderate and Low. This is determined by the health score and the risk category has already been listed in our dataset. We want to get insight about the distribution of Yelp ratings within each risk category.
+We subset the raw dataset to remove the NA value in risk category field. Then use **qplot** to draw a histogram of the count of ratings from 1 to 5 within each risk category. Given the visualization below, notice that most restaurants with high Yelp rating are in low and moderate categories. From this result, users can consider Yelp rating as a reliable reference to help them make decesions.
+
+
+```{r,echo= FALSE, message=FALSE, warning=FALSE}
+risk_data = subset(yelp_data,yelp_data$risk_category!="")
+qplot(x = rating, data = risk_data, geom = "histogram", facets = .~risk_category, fill = risk_category, binwidth = 1, main = "Histograms of Yelp Ratings", alpha = I(0.5))+ theme(legend.key.size=unit(0.25,"cm"))
+
+```
+
+
+
